@@ -38,11 +38,12 @@ class Config:
 
 def prepare(config, stage, load_model=False, noneed_data=False):
     net = Net(config)
-    net = nn.DataParallel(net)
-    cudnn.benchmark = True
+    #net = nn.DataParallel(net)
     if load_model or stage != 'train': 
         net.load_state_dict(torch.load(os.path.join('model', '{}.pth'.format(config.name))))
-    net.to(parameter.device)
+    if parameter.use_gpu:
+        net.cuda()
+        cudnn.benchmark = True
     if noneed_data:return net
     if stage=='train':
         dataloader = dl.DataLoader(data(stage='train', config=config), \
@@ -71,8 +72,11 @@ def train(net, dataloader, config):
         n_correct = 0.
         print('Epoch:{}'.format(i_epoch))
         for i_batch, data in enumerate(dataloader):
-            input = data[0].float().to(parameter.device)
-            label = data[1].float().to(parameter.device)
+            input = data[0].float()
+            label = data[1].float()
+            if parameter.use_gpu:
+                input = input.cuda()
+                label = label.cuda()
             optimizer.zero_grad()
             output = net(input)
             loss = criterion(output, label)
@@ -103,8 +107,11 @@ def test(net, dataloader):
     total_annot = [None]*100
     annot = None
     for i_batch, data in enumerate(dataloader):
-        input = data[0].float().to(parameter.device)
-        label = data[1].float().to(parameter.device)
+        input = data[0].float()
+        label = data[1].float()
+        if parameter.use_gpu:
+            input = input.cuda()
+            label = label.cuda()
         id = data[2]
         length = data[3]
         
@@ -146,5 +153,5 @@ def firefunc(config, istrain=True, load_model=False):
             test(net, dataloader)
 
 if __name__ == '__main__':
-    config = Config(segment_length=20.)
+    config = Config(segment_length=5.)
     fire.Fire(lambda istrain=True, load_model=False:firefunc(config, istrain, load_model))

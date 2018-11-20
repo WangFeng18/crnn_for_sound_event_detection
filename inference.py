@@ -18,23 +18,25 @@ class RealTimeDetection():
     def run(self):
         self.recorder.setDaemon(True)
         self.recorder.start()
+        print('Detected Event:')
         while(1):
             data = self.recorder.buffer.get()
-            result = self.detection.forward(data)
+            result, exfeat_t, forward_t = self.detection.forward(data)
             qs = self.recorder.buffer.qsize()
-            sys.stdout.write(' '*100+'\r')
-            sys.stdout.write('quesize: {:d}\t'.format(qs))
+            sys.stdout.write(' '*120+'\r')
+            #sys.stdout.write('quesize: {:d}\t'.format(qs))
             if result[0].shape[0] == 0:
-                sys.stdout.write('Silent\r')
+                sys.stdout.write('Silent ')
             else:
                 for i in result[0]:
                     sys.stdout.write(parameter.id_name[i]+' ')
-                sys.stdout.write('\r')
+            sys.stdout.write('Total Time/Frame(40ms):{:.4f}ms, (Feature Extraction costs:{:.4f}ms, Forward costs:{:.4f}ms)'.format((exfeat_t+forward_t)*1000, exfeat_t*1000, forward_t*1000))
+            sys.stdout.write('\r')
             sys.stdout.flush()
 
 class Detection():
     def __init__(self):
-        config = runner.Config()
+        config = runner.Config(segment_length=20.)
         self.net = runner.prepare(config, stage='evaluate', noneed_data=True)
         self.data = np.zeros((1,1,int(config.segment_length*1000./parameter.hop_length),40))
         self.extractor = Extractor.MelExtractor(n_fft=2048, fmin=0., fmax=22050., htk=True,logarithmic=True)
@@ -42,15 +44,24 @@ class Detection():
 
     def forward(self, data):
         # data []
+        st = time.time()
         self.data = np.roll(self.data, -2, axis=2)
         context = np.concatenate((self.history_half_segments, data))
         feat = self.extractor.extract(context).T[1:-1]
         self.data[0,0,-2:,:] = feat
-        output = self.net(torch.from_numpy(self.data).float().to(parameter.device))
+        se = time.time()
+        exfeat_t = se - st
+
+        input = torch.from_numpy(self.data).float()
+        if parameter.use_gpu:
+            input = input.cuda()
+        output = self.net(input)
         output = output.cpu().detach().numpy()[:,-1,:]
         predict = (output>0.5).astype(np.float).squeeze()
         self.history_half_segments = data[-parameter.hop_length*44100/1000:]
-        return predict.nonzero() 
+        st = time.time()
+        forward_t = st-se
+        return predict.nonzero(), exfeat_t, forward_t
         
         
 class Recorder(threading.Thread):

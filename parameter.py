@@ -1,8 +1,8 @@
 import os
 import torch
 # constant
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-#device = torch.device('cpu')
+#device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+use_gpu = True
 n_classes = 16
 hop_length = 20
 id_name = ['alarms_and_sirens', 'baby_crying', 'bird_singing',
