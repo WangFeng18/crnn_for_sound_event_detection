@@ -21,7 +21,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 # config is used to test the best model, so it stores variable hyparameter or some values needed to be adjust.
 class Config:
     # training parameter
-    def __init__(self, max_epoch = 1000,lr = 0.0001, batch_size = 64, stride = -1, segment_length = 20.,net = 'NETA'):
+    def __init__(self, max_epoch = 1000,lr = 0.00001, batch_size = 64, stride = -1, segment_length = 20.,net = 'NETA'):
         self.max_epoch = max_epoch 
         self.lr = lr
         self.batch_size = batch_size
@@ -32,11 +32,18 @@ class Config:
         self.name = self._getname()
 
     def _getname(self):
-        return '_'.join([self.net, 'sl'+str(self.segment_length)])
+        return '_'.join([self.net, 'sl'+str(self.segment_length), parameter.feature_type])
 
     
 
-def prepare(config, stage):
+def prepare(config, stage, load_model=False, noneed_data=False):
+    net = Net(config)
+    net = nn.DataParallel(net)
+    cudnn.benchmark = True
+    if load_model or stage != 'train': 
+        net.load_state_dict(torch.load(os.path.join('model', '{}.pth'.format(config.name))))
+    net.to(parameter.device)
+    if noneed_data:return net
     if stage=='train':
         dataloader = dl.DataLoader(data(stage='train', config=config), \
                 batch_size=config.batch_size, shuffle=True, num_workers=4)
@@ -44,16 +51,9 @@ def prepare(config, stage):
         dataloader = dl.DataLoader(data(stage='evaluate', config=config), batch_size=100, num_workers=4)
     else:
         dataloader = dl.DataLoader(data(stage='test', config=config), batch_size=100, num_workers=4)
-    net = Net(config)
-    net = nn.DataParallel(net)
-    cudnn.benchmark = True
     return dataloader, net
 
-def train(net, dataloader, config, load_model):
-    # 1.define loss
-    # 2.define opt
-    if load_model: net.load_state_dict(torch.load(os.path.join('model', '{}.pth'.format(config.name))))
-    net.cuda()
+def train(net, dataloader, config):
     #criterion = nn.MSELoss()
     criterion = nn.BCELoss()
     #optimizer = optim.SGD(net.parameters(), lr=config.lr, momentum=0.9, weight_decay=5e-4)
@@ -71,8 +71,8 @@ def train(net, dataloader, config, load_model):
         n_correct = 0.
         print('Epoch:{}'.format(i_epoch))
         for i_batch, data in enumerate(dataloader):
-            input = data[0].float().cuda()
-            label = data[1].float().cuda()
+            input = data[0].float().to(parameter.device)
+            label = data[1].float().to(parameter.device)
             optimizer.zero_grad()
             output = net(input)
             loss = criterion(output, label)
@@ -92,10 +92,7 @@ def train(net, dataloader, config, load_model):
         #test(net, test_dataloader, False)
         torch.save(net.state_dict(), os.path.join('model', '{}.pth'.format(config.name)))
 
-def test(net, dataloader, load_model):
-    if load_model:
-        net.load_state_dict(torch.load(os.path.join('model', '{}.pth'.format(config.name))))
-    net.cuda()
+def test(net, dataloader):
     net.eval()
     n_correct = 0.
     n_total = 0.
@@ -106,8 +103,8 @@ def test(net, dataloader, load_model):
     total_annot = [None]*100
     annot = None
     for i_batch, data in enumerate(dataloader):
-        input = data[0].float().cuda()
-        label = data[1].float().cuda()
+        input = data[0].float().to(parameter.device)
+        label = data[1].float().to(parameter.device)
         id = data[2]
         length = data[3]
         
@@ -115,7 +112,7 @@ def test(net, dataloader, load_model):
         loss = criterion(output, label)
 
         output = output.cpu().detach().numpy()
-        predict = (output>0.5).astype(np.float)
+        predict = (output>=0.5).astype(np.float)
 
         for i_sample in range(id.shape[0]):
             current_id = id[i_sample]
@@ -142,12 +139,12 @@ def test(net, dataloader, load_model):
 
 
 def firefunc(config, istrain=True, load_model=False):
-    dataloader, net = prepare(config, stage=('train' if istrain else 'evaluate'))
-    if istrain:train(net, dataloader, config, load_model)
+    dataloader, net = prepare(config, stage=('train' if istrain else 'evaluate'), load_model=load_model)
+    if istrain:train(net, dataloader, config)
     else: 
         with torch.no_grad():
-            test(net, dataloader, True)
+            test(net, dataloader)
 
 if __name__ == '__main__':
-    config = Config()
+    config = Config(segment_length=20.)
     fire.Fire(lambda istrain=True, load_model=False:firefunc(config, istrain, load_model))

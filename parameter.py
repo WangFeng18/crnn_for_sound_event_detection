@@ -1,5 +1,8 @@
 import os
+import torch
 # constant
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+#device = torch.device('cpu')
 n_classes = 16
 hop_length = 20
 id_name = ['alarms_and_sirens', 'baby_crying', 'bird_singing',
@@ -25,12 +28,19 @@ name_id = {'alarms_and_sirens':0,\
         'rain':14,
         'thunder':15,
         }
-feature_dir = 'data/TUT_SED/TUT-SED-synthetic-2016/features/'
+feature_type = 'X' # 'X' or 'O' X means ours, O means original, Don't think too much on XO!
+if feature_type == 'O':
+    feature_dir = 'data/TUT_SED/TUT-SED-synthetic-2016/features/'
+if feature_type == 'X':
+    feature_dir = 'data/TUT_SED/TUT-SED-synthetic-2016/Xfeatures/'
 meta_dir = 'data/TUT_SED/TUT-SED-synthetic-2016/meta/'
 estimate_dir = 'data/TUT_SED/TUT-SED-synthetic-2016/estimate/'
 audio_dir = 'data/TUT_SED/TUT-SED-synthetic-2016/audio/'
 audio_template = 'TUT-SED-synthetic-2016-mix-{}.wav'
-feat_template = 'TUT-SED-synthetic-2016-mix-{}.cpickle'
+if feature_type == 'O':
+    feat_template = 'TUT-SED-synthetic-2016-mix-{}.cpickle'
+if feature_type == 'X':
+    feat_template = 'TUT-SED-synthetic-2016-mix-{}.npy'
 meta_template = 'TUT-SED-synthetic-2016-annot-{}.txt'
 train = range(40,100)
 evaluate = range(20)

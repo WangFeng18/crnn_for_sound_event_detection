@@ -35,7 +35,7 @@ class Net(nn.Module):
         out = F.relu(self.bn3(self.conv3(out)))
         out = self.dp3(out)
         out = self.pool3(out)
-        out = out.squeeze().transpose(1,2)
+        out = out.squeeze(dim=-1).transpose(1,2)
         out, hidden = self.rnn(out)
         out = out.contiguous().view(-1, 96) 
         out = self.fc(out)
