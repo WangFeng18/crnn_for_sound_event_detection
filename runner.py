@@ -21,7 +21,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 # config is used to test the best model, so it stores variable hyparameter or some values needed to be adjust.
 class Config:
     # training parameter
-    def __init__(self, max_epoch = 1000,lr = 0.00001, batch_size = 64, stride = -1, segment_length = 20.,net = 'NETA'):
+    def __init__(self, max_epoch = 10000,lr = 0.0001, batch_size = 64, stride = 173, segment_length = 20.,net = 'NETA', bidirectional=True):
         self.max_epoch = max_epoch 
         self.lr = lr
         self.batch_size = batch_size
@@ -30,6 +30,7 @@ class Config:
         self.segment_length = segment_length
         self.net = net
         self.name = self._getname()
+        self.bidirectional = bidirectional
 
     def _getname(self):
         return '_'.join([self.net, 'sl'+str(self.segment_length), parameter.feature_type])
@@ -38,7 +39,7 @@ class Config:
 
 def prepare(config, stage, load_model=False, noneed_data=False):
     net = Net(config)
-    #net = nn.DataParallel(net)
+    net = nn.DataParallel(net)
     if load_model or stage != 'train': 
         net.load_state_dict(torch.load(os.path.join('model', '{}.pth'.format(config.name))))
     if parameter.use_gpu:
@@ -49,9 +50,9 @@ def prepare(config, stage, load_model=False, noneed_data=False):
         dataloader = dl.DataLoader(data(stage='train', config=config), \
                 batch_size=config.batch_size, shuffle=True, num_workers=4)
     elif stage=='evaluate':
-        dataloader = dl.DataLoader(data(stage='evaluate', config=config), batch_size=100, num_workers=4)
+        dataloader = dl.DataLoader(data(stage='evaluate', config=config), batch_size=32, num_workers=4)
     else:
-        dataloader = dl.DataLoader(data(stage='test', config=config), batch_size=100, num_workers=4)
+        dataloader = dl.DataLoader(data(stage='test', config=config), batch_size=32, num_workers=4)
     return dataloader, net
 
 def train(net, dataloader, config):
@@ -151,7 +152,8 @@ def firefunc(config, istrain=True, load_model=False):
     else: 
         with torch.no_grad():
             test(net, dataloader)
+            os.system('python metrics.py')
 
 if __name__ == '__main__':
-    config = Config(segment_length=5.)
+    config = Config(segment_length=20.)
     fire.Fire(lambda istrain=True, load_model=False:firefunc(config, istrain, load_model))

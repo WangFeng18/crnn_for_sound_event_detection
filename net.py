@@ -22,8 +22,8 @@ class Net(nn.Module):
         self.bn3 = nn.BatchNorm2d(96)
         self.dp3 = nn.Dropout2d(p=0.25)
         self.pool3 = nn.MaxPool2d(kernel_size=(1, 2), stride=(1, 2))
-        self.rnn = nn.GRU(input_size=96, hidden_size=96, num_layers=1, batch_first=True, dropout=0)
-        self.fc = nn.Linear(96, parameter.n_classes)
+        self.rnn = nn.GRU(input_size=96, hidden_size=96, num_layers=1, batch_first=True, dropout=0, bidirectional=config.bidirectional)
+        self.fc = nn.Linear(96*(2 if config.bidirectional else 1), parameter.n_classes)
 
     def forward(self, data):
         out = F.relu(self.bn1(self.conv1(data)))
@@ -37,7 +37,11 @@ class Net(nn.Module):
         out = self.pool3(out)
         out = out.squeeze(dim=-1).transpose(1,2)
         out, hidden = self.rnn(out)
-        out = out.contiguous().view(-1, 96) 
+        if self.config.bidirectional:
+            out = out.contiguous().view(-1,2*96)
+        else:
+            out = out.contiguous().view(-1, 96) 
+
         out = self.fc(out)
         out = F.sigmoid(out)
         out = out.view(-1, self.rnn_length, parameter.n_classes)
